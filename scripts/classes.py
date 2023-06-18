@@ -128,7 +128,7 @@ class RouteInfo:
             deviateRouteName, deviateRoute = self.pick_highest_profit_route(deviateRoutesDict)
             # if deviate route has a lot more profit, then assign as correct route
             if self.route:
-                if deviateRoute["totalProfit"] > straightRoute["totalProfit"] + 800000:
+                if deviateRoute["totalProfit"] > straightRoute["totalProfit"] * 3:
                     self.routeName = deviateRouteName
                     self.route = deviateRoute
             else:
