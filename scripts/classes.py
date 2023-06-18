@@ -407,7 +407,7 @@ class TripPlanner:
         if minHop <= 1:
             system_sectioned = [filtered_system]
         else:
-            sectionLength = int(float(len(filtered_system))/2.0)
+            sectionLength = int(float(len(filtered_system))/minHop)
             # deal with situation if section length is shorter than 1
             if not sectionLength:
                 sectionLength = 1
@@ -421,6 +421,9 @@ class TripPlanner:
         for id, section in enumerate(system_sectioned):
             print("LOG: Planning trade for section: {}".format(section))
             deviations = []
+
+            if not section:
+                continue
 
             # generate station data for start and end
             for system in [section[0], section[-1]]:
