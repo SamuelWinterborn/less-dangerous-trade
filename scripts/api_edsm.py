@@ -110,7 +110,7 @@ def get_stations(systemName, noPlanet=True):
             if "type" not in station:
                 continue
             else:
-                if station["type"] == "Odyssey Settlement" or station["type"] == "Planetary Outpost" or not station["haveMarket"]:
+                if station["type"] == "Odyssey Settlement" or "Planetary" in station["type"] or not station["haveMarket"]:
                     continue
         result.append(station["name"])
 

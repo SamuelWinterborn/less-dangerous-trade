@@ -34,6 +34,8 @@ class MarketInfo:
 
     # get list of demanded items
     def parse_data(self):
+        if not self.marketD:
+            return
         # loop all market data
         for market in self.marketD:
             # add items with higher demand than stock to list
