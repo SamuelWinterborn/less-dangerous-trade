@@ -59,18 +59,21 @@ def is_system_anarchy(systemName):
         return True
 
 # returns list of all systems in radius of a given system
-def get_systems_in_radius(systemName, radius, minRadius=None, includeAnarchy=False):
+def get_systems_in_radius(systemName, radius, coords=None, minRadius=None, includeAnarchy=False):
     if not systemName:
         print("ERROR: Need system name to find nearby!")
         raise
     
     url = "https://www.edsm.net/api-v1/sphere-systems?systemName={}&radius={}&showCoordinates=1".format(systemName, radius)
+    if coords:
+        if len(coords) == 3:
+            url = "https://www.edsm.net/api-v1/sphere-systems?x={}&y={}&z={}&radius={}&showCoordinates=1".format(coords['x'], coords['y'], coords['z'], radius)
     if minRadius:
         url += "&minRadius={}".format(minRadius)
     response = api_call(url)
 
     if not response:
-        print("ERROR: Couldn't find system and/or nearby!")
+        print("ERROR: Couldn't find system {} and/or nearby!".format(systemName))
         return [{"name": systemName, "coords": {"x": 0, "y": 0, "z": 0}, "distance": 0}]   # return self
     
     result = []

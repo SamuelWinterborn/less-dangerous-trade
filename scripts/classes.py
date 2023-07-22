@@ -11,8 +11,8 @@ def get_system_coord(systemName):
 def is_system_anarchy(systemName):
     return api.is_system_anarchy(systemName)
 
-def get_systems_in_radius(systemName, radius, minRadius=None, includeAnarchy=False):
-    return api.get_systems_in_radius(systemName, radius, minRadius, includeAnarchy)
+def get_systems_in_radius(systemName, radius, coords=None, minRadius=None, includeAnarchy=False):
+    return api.get_systems_in_radius(systemName, radius, coords, minRadius, includeAnarchy)
 
 def get_stations(systemName, noPlanet=True):
     return api.get_stations(systemName, noPlanet)
@@ -278,7 +278,7 @@ class RouteInfo:
 Main classes
 """
 class RoutePlanner:
-    def __init__(self, curSystem: str, targetSystem: str, jumpCapacity, minRange=0):
+    def __init__(self, curSystem: str, targetSystem: str, jumpCapacity, minRange=0, calculate=True):
         assert isinstance(jumpCapacity, int) or isinstance(jumpCapacity, float)
         self.system_route = []
 
@@ -293,7 +293,13 @@ class RoutePlanner:
             print("ERROR: Couldn't find current coordinate!")
         curSystem = SystemInfo(curSystem, coords=curCoords)
         
-        self.find_target_system(curSystem, targetSystem, coords, jumpCapacity)
+        if calculate:
+            self.find_target_system(curSystem, targetSystem, coords, jumpCapacity)
+        else:
+            targetCoords = get_system_coord(targetSystem)
+            targetSystem = SystemInfo(targetSystem, coords=targetCoords)
+            self.system_route.append(curSystem)
+            self.system_route.append(targetSystem)
 
     def find_target_system(self, curSystem, targetSystemName, targetCoord, jumpCapacity, latestNearby=[], excluded=[], goneBack=False):
         if goneBack and latestNearby:
@@ -303,7 +309,7 @@ class RoutePlanner:
             self.system_route.append(curSystem)
 
             # get nearby reachable systems
-            nearbys = get_systems_in_radius(curSystem.name, jumpCapacity, includeAnarchy=True)
+            nearbys = get_systems_in_radius(curSystem.name, jumpCapacity, coords=curSystem.coords, includeAnarchy=True)
 
         nearbyNames = [x["name"] for x in nearbys]
         curNames = [x.name for x in self.system_route]
@@ -329,6 +335,7 @@ class RoutePlanner:
                     if curDist < distance and system["name"] not in excluded:
                         distance = curDist
                         newStop = system
+
             if not newStop:
                 print("ERROR: Can't find next stop!")   # there should always be at least itself in the return list, so error if dont have
                 raise
@@ -340,7 +347,7 @@ class RoutePlanner:
                     latestNearby = []   # if already gone back dont pass nearbys again
                 self.find_target_system(self.system_route[-1], targetSystemName, targetCoord, jumpCapacity, latestNearby=latestNearby, excluded=excluded, goneBack=True)
 
-            elif newStop in curNames:   # if the closest stop is already in the list (i.e itself), then remove from the list and step back
+            elif newStop["name"] in curNames:   # if the closest stop is already in the list (i.e itself), then remove from the list and step back
                 excluded.append(newStop["name"])
                 self.remove_system(newStop["name"])   # remove system from system_route
                 if goneBack:
@@ -354,7 +361,7 @@ class RoutePlanner:
     Util function
     """
     def remove_system(self, systemD):
-        toDelName = systemD["name"]
+        toDelName = systemD
         systemToDel = next((x for x in self.system_route if x.name == toDelName), None)
         if systemToDel:
             self.system_route.remove(systemToDel)
@@ -375,7 +382,7 @@ class TripPlanner:
         targetSystem, targetStation = self.location_parse(targetLocation)
         
         # get neccessary stops
-        self.routePlanner = RoutePlanner(curSystem, targetSystem, jumpCapacity, minRange=minRange)
+        self.routePlanner = RoutePlanner(curSystem, targetSystem, jumpCapacity, minRange=minRange, calculate=minHop>0)
         print("LOG: Route planned.")
 
         # embbed stations into first and last system and generate their infos
@@ -444,15 +451,16 @@ class TripPlanner:
                     system.gather_station_infos()
                     deviations.append(system)
                 print("LOG: Gathering deviations...")
-                for system in section[1:-1]:
-                    nearbys = get_systems_in_radius(system.name, radius=self.jumpCapacity*self.deviation)
-                    curNames = [x.name for x in deviations] + [section[0].name, section[-1].name]
-                    for systemD in nearbys:
-                        if systemD["name"] not in curNames:
-                            newSystem = SystemInfo(systemD["name"], systemD["coords"], systemD["distance"])
-                            newSystem.get_all_stationNames()
-                            newSystem.gather_station_infos()
-                            deviations.append(newSystem)
+                if deviations>0:
+                    for system in section[1:-1]:
+                        nearbys = get_systems_in_radius(system.name, coords=system.coords, radius=self.jumpCapacity*self.deviation)
+                        curNames = [x.name for x in deviations] + [section[0].name, section[-1].name]
+                        for systemD in nearbys:
+                            if systemD["name"] not in curNames:
+                                newSystem = SystemInfo(systemD["name"], systemD["coords"], systemD["distance"])
+                                newSystem.get_all_stationNames()
+                                newSystem.gather_station_infos()
+                                deviations.append(newSystem)
 
             print("LOG: Calculating trade route for section...")
             newRoute = RouteInfo(section[0],section[-1], deviations, self.cargoSpace)
