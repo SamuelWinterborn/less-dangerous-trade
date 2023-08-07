@@ -451,7 +451,7 @@ class TripPlanner:
                     system.gather_station_infos()
                     deviations.append(system)
                 print("LOG: Gathering deviations...")
-                if deviations>0:
+                if self.deviation>0:
                     for system in section[1:-1]:
                         nearbys = get_systems_in_radius(system.name, coords=system.coords, radius=self.jumpCapacity*self.deviation)
                         curNames = [x.name for x in deviations] + [section[0].name, section[-1].name]
