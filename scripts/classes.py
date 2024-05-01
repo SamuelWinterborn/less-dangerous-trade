@@ -345,6 +345,9 @@ class RoutePlanner:
                 # step back now
                 if goneBack:
                     latestNearby = []   # if already gone back dont pass nearbys again
+                if not self.system_route:
+                    print("ERROR: Failed to plan route!")
+                    raise
                 self.find_target_system(self.system_route[-1], targetSystemName, targetCoord, jumpCapacity, latestNearby=latestNearby, excluded=excluded, goneBack=True)
 
             elif newStop["name"] in curNames:   # if the closest stop is already in the list (i.e itself), then remove from the list and step back
@@ -352,6 +355,9 @@ class RoutePlanner:
                 self.remove_system(newStop["name"])   # remove system from system_route
                 if goneBack:
                     latestNearby = []   # if already gone back dont pass nearbys again
+                if not self.system_route:
+                    print("ERROR: Failed to plan route!")
+                    raise
                 self.find_target_system(self.system_route[-1], targetSystemName, targetCoord, jumpCapacity, latestNearby=latestNearby, excluded=excluded, goneBack=True)
             else:
                 newSystem = SystemInfo(newStop["name"], coords=newStop["coords"], distance=newStop["distance"])
