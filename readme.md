@@ -15,6 +15,7 @@ I personally like to take a transport mission that goes very far away, so that I
 ## Requirements
 - Elite Dangerous of course
 - Python (I was using 3.9, but any python3 should be fine)
+- requests (install with `pip install requests`)
 
 ---
 
