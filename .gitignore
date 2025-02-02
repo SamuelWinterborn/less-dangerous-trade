@@ -162,6 +162,7 @@ cython_debug/
 # User-specific files
 main.ipynb
 database/
+database_raw*/
 
 # dev files
 test.ipynb
