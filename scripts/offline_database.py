@@ -192,7 +192,12 @@ def get_systems_in_radius(systemName, radius, coords=None, minRadius=None, inclu
 
         for index, row in df.iterrows():
             if not is_system_anarchy(row['name']):
-                result.append({"name": row['name'], "coords": row['coords'], "distance": math.dist(coords.items(), row['coords'].items())})
+                result.append(
+                    {"name": row['name'], 
+                     "coords": row['coords'], 
+                     "distance": math.dist([originX, originY, originZ], [row['coords']['x'], row['coords']['y'], row['coords']['z']])
+                    }
+                    )
 
     return result
 
