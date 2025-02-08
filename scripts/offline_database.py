@@ -190,14 +190,17 @@ def get_systems_in_radius(systemName, radius, coords=None, minRadius=None, inclu
             ]
             dfInRange = dfInRange_filtered
 
-        for index, row in df.iterrows():
-            if not is_system_anarchy(row['name']):
-                result.append(
-                    {"name": row['name'], 
-                     "coords": row['coords'], 
-                     "distance": math.dist([originX, originY, originZ], [row['coords']['x'], row['coords']['y'], row['coords']['z']])
-                    }
-                    )
+        for index, row in dfInRange.iterrows():
+            if not includeAnarchy:
+                if is_system_anarchy(row['name']):
+                    continue
+
+            result.append(
+                {"name": row['name'], 
+                    "coords": row['coords'], 
+                    "distance": math.dist([originX, originY, originZ], [row['coords']['x'], row['coords']['y'], row['coords']['z']])
+                }
+                )
 
     return result
 
