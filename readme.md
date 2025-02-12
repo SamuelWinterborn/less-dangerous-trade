@@ -24,7 +24,7 @@ I personally like to take a transport mission that goes very far away, so that I
 First go to your downloaded path `cd <where-this-folder-is>`, and then just use `python main.py`. Alternatively, there's also `main.ipynb` for Jupyter use (I personally prefer this more).
 
 To edit the parameters, you would have to edit the main script (`main.py` or `main.ipynb`) for now. It's actually just a single line: \
-`routePlanner = TripPlanner("Ubassi/Bloomfield Platform","Gilya/Kendrick Enterprise",18, minHop=2, deviation=0.7, cargoSpace=104)`\
+`tripPlanner.plan("Ubassi/Bloomfield Platform","Gilya/Kendrick Enterprise",18, minHop=2, deviation=0.7, cargoSpace=104)`\
 
 Explaination:
 ```

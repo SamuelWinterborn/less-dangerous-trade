@@ -178,7 +178,7 @@ def get_systems_in_radius(systemName, radius, coords=None, minRadius=None, inclu
             (df.coords.apply(lambda entry: entry['z'] >= originZ - radius*0.5)) & 
             (df.coords.apply(lambda entry: entry['z'] <= originZ + radius*0.5)) 
             ]
-        
+
         if minRadius:
             dfInRange_filtered = dfInRange[
             (df.coords.apply(lambda entry: entry['x'] >= originX + minRadius*0.5)) & 
@@ -194,7 +194,6 @@ def get_systems_in_radius(systemName, radius, coords=None, minRadius=None, inclu
             if not includeAnarchy:
                 if is_system_anarchy(row['name']):
                     continue
-
             result.append(
                 {"name": row['name'], 
                     "coords": row['coords'], 

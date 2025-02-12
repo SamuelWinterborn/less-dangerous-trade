@@ -1,4 +1,5 @@
 import math
+from collections import deque
 
 #from . import api_edsm as api
 from . import offline_database as api
@@ -58,6 +59,11 @@ class SystemInfo:
         self.stationToScan = []
         self.stationInfos = []
 
+        self.neighbors = []
+
+    def add_neighbor(self, neighbor):
+        self.neighbors.append(neighbor)
+
     def get_all_stationNames(self):
         self.stationToScan = get_stations(self.name)
 
@@ -92,6 +98,7 @@ class SystemInfo:
         result = SystemInfo(self.name, self.coords, self.distance)
         result.stationToScan[:] = self.stationToScan[:]
         result.stationInfos[:] = self.stationInfos[:]
+        result.neighbors = self.neighbors
         return result
     
 class RouteInfo:
@@ -267,10 +274,24 @@ class RuntimeDatabase:
 
         self.b_has_collected_datas = False
 
+    def build_neighbors(self, maxDist, minDist=0):
+        for i in range(len(self.systems)):
+            for j in range(i + 1, len(self.systems)):  # Avoid duplicate checks
+                curDist = math.dist(list(self.systems[i].coords.values()), 
+                                    list(self.systems[j].coords.values()))
+                if curDist < maxDist and curDist > minDist:
+                    self.systems[i].add_neighbor(self.systems[j])
+                    self.systems[j].add_neighbor(self.systems[i])
+
     def add_system(self, system : SystemInfo):
         if system.name not in self.system_names:
             self.systems.append(system)
             self.system_names.add(system.name)
+            return system
+        else:
+            for curSystem in self.systems:
+                if curSystem.name == system.name:
+                    return curSystem
 
     def add_station(self, station : StationInfo):
         if station.name not in self.station_names:
@@ -305,8 +326,8 @@ def get_systems_in_radius(systemName, radius, database : RuntimeDatabase, coords
 
         for system in result:
             systemInfo = SystemInfo(system["name"], coords=system["coords"], distance=system["distance"])
+            systemInfo = database.add_system(systemInfo)
             parsedResult.append(systemInfo)
-            database.add_system(systemInfo)
 
     else:
         if not coords:
@@ -324,7 +345,9 @@ def get_systems_in_radius(systemName, radius, database : RuntimeDatabase, coords
             if minRadius and dist < minRadius:
                 continue
 
-            # SAM: Should filter out with include anarchy here too
+            if not includeAnarchy:
+                if is_system_anarchy(system.name):
+                    continue
 
             parsedResult.append(system)
 
@@ -356,90 +379,130 @@ class RoutePlanner:
         if not curCoords:
             print("ERROR: Couldn't find current coordinate!")
         curSystemInfo = SystemInfo(curSystemName, coords=curCoords)
-        self.database.add_station(curSystemInfo)
+        self.database.add_system(curSystemInfo)
         
         # we calculate the distance between start and end point and gather all systems and coords that are within this distance
         # to save time needed to go thru database again on each search
         furthestDist = math.dist (list(curCoords.values()), list(coords.values()))
         targetSystemInfo = SystemInfo(targetSystemName, coords=coords, distance=furthestDist)
-        extendsFromCur = get_systems_in_radius(curSystemName, furthestDist*0.5, self.database, coords=curCoords, includeAnarchy=True)
-        extendsFromTar = get_systems_in_radius(targetSystemName, furthestDist*0.5, self.database, coords=coords, includeAnarchy=True)
-        self.database.b_has_collected_datas = True
+        self.database.add_system(targetSystemInfo)
 
         if calculate:
-            self.find_target_system(curSystemInfo, targetSystemName, list(coords.values()), jumpCapacity)
+            extendsFromCur = get_systems_in_radius(curSystemName, furthestDist, self.database, coords=curCoords, includeAnarchy=True)
+            extendsFromTar = get_systems_in_radius(targetSystemName, furthestDist, self.database, coords=coords, includeAnarchy=True)
+            self.database.b_has_collected_datas = True
+
+            self.database.build_neighbors(jumpCapacity, minRange)
+            self.bi_directional_bfs(curSystemInfo, targetSystemInfo)
         else:
             self.system_route.append(curSystemInfo)
             self.system_route.append(targetSystemInfo)
 
-    def find_target_system(self, curSystem : SystemInfo, targetSystemName, targetCoord, jumpCapacity, latestNearby=[], excluded=[], goneBack=False):
-        if goneBack and latestNearby:
-            nearbys = latestNearby
-        else:
-            if not goneBack:
-                # append the current system into list
-                self.system_route.append(curSystem)
+    def bi_directional_bfs(self, startSystem: SystemInfo, targetSystem: SystemInfo):
+        if startSystem.name == targetSystem.name:
+            return
+        # Initialize two search fronts
+        queue_start = deque([[startSystem]])  # BFS queue from start
+        queue_end = deque([[targetSystem]])  # BFS queue from end
+        visited_start = {startSystem: None}  # Parent tracking for reconstruction
+        visited_end = {targetSystem: None}
 
-            # get nearby reachable systems
-            nearbys = get_systems_in_radius(curSystem.name, jumpCapacity, self.database, coords=curSystem.coords, includeAnarchy=True)
+        while queue_start and queue_end:
+            # Expand from the start
+            path_start = queue_start.popleft()
+            node_start = path_start[-1]
 
-        nearbyNames = [x.name for x in nearbys]
-        curNames = [x.name for x in self.system_route]
+            for neighbor in node_start.neighbors:
+                if neighbor in visited_end:
+                    self.system_route = path_start + visited_end[neighbor][::-1]
+                    return
+                if neighbor not in visited_start:
+                    visited_start[neighbor] = path_start + [neighbor]
+                    queue_start.append(visited_start[neighbor])
 
-        # if target is reachable, append and done, else find closest to target and run again
-        if targetSystemName in nearbyNames:
-            targetSystem = next((x for x in nearbys if x.name == targetSystemName), None)
-            if targetSystem:
-                self.system_route.append(targetSystem)
-            else:
-                print("ERROR: Couldn't get Destination system!")
-        else:
-            # calculate distance and find where next stop should be
-            distance = None
-            newStop = None
-            for system in nearbys:
-                coord = list(system.coords.values())
-                curDist = math.dist (coord, targetCoord)
-                if distance is None:
-                    distance = curDist
-                    newStop = system
-                else:
-                    if curDist < distance and system.name not in excluded:
-                        distance = curDist
-                        newStop = system
+            # Expand from the end
+            path_end = queue_end.popleft()
+            node_end = path_end[-1]
 
-            if not newStop:
-                print("ERROR: Can't find next stop!")   # there should always be at least itself in the return list, so error if dont have
-                raise
+            for neighbor in node_end.neighbors:
+                if neighbor in visited_start:
+                    self.system_route = visited_start[neighbor] + path_end[::-1]
+                    return
+                if neighbor not in visited_end:
+                    visited_end[neighbor] = path_end + [neighbor]
+                    queue_end.append(visited_end[neighbor])
 
-            elif newStop.name in excluded:
-                print(self.system_route)
-                self.remove_system(newStop.name) # remove system from system_route
-                # step back now
-                if goneBack:
-                    latestNearby = []   # if already gone back dont pass nearbys again
-                if not self.system_route:
-                    print("ERROR: Failed to plan route!")
-                    raise
-                print(self.system_route)
-                print("LOG: Hit a dead end with {}, going back".format(newStop.name))
-                print (excluded)
-                self.find_target_system(self.system_route[-2] if self.system_route[-1].name == newStop.name else self.system_route[-1], 
-                                        targetSystemName, targetCoord, jumpCapacity, latestNearby=latestNearby, excluded=excluded, goneBack=True)
+        print("ERROR: Failed to plan route!")
 
-            elif newStop.name in curNames:   # if the closest stop is already in the list (i.e itself), then remove from the list and step back
-                excluded.append(newStop.name)
-                self.remove_system(newStop.name)   # remove system from system_route
-                if goneBack:
-                    latestNearby = []   # if already gone back dont pass nearbys again
-                if not self.system_route:
-                    print("ERROR: Failed to plan route!")
-                    raise
-                print("LOG: Hit a dead end with {}, going back".format(newStop.name))
-                #print (excluded)
-                self.find_target_system(self.system_route[-1], targetSystemName, targetCoord, jumpCapacity, latestNearby=latestNearby, excluded=excluded, goneBack=True)
-            else:
-                self.find_target_system(newStop, targetSystemName, targetCoord, jumpCapacity, latestNearby=latestNearby, excluded=excluded)
+
+    # def find_target_system(self, curSystem : SystemInfo, targetSystemName, targetCoord, jumpCapacity, latestNearby=[], excluded=[], goneBack=False):
+    #     if goneBack and latestNearby:
+    #         nearbys = latestNearby
+    #     else:
+    #         if not goneBack:
+    #             # append the current system into list
+    #             self.system_route.append(curSystem)
+
+    #         # get nearby reachable systems
+    #         nearbys = get_systems_in_radius(curSystem.name, jumpCapacity, self.database, coords=curSystem.coords, includeAnarchy=True)
+
+    #     nearbyNames = [x.name for x in nearbys]
+    #     curNames = [x.name for x in self.system_route]
+
+    #     # if target is reachable, append and done, else find closest to target and run again
+    #     if targetSystemName in nearbyNames:
+    #         targetSystem = next((x for x in nearbys if x.name == targetSystemName), None)
+    #         if targetSystem:
+    #             self.system_route.append(targetSystem)
+    #         else:
+    #             print("ERROR: Couldn't get Destination system!")
+    #     else:
+    #         # calculate distance and find where next stop should be
+    #         distance = None
+    #         newStop = None
+    #         for system in nearbys:
+    #             coord = list(system.coords.values())
+    #             curDist = math.dist (coord, targetCoord)
+    #             if distance is None:
+    #                 distance = curDist
+    #                 newStop = system
+    #             else:
+    #                 if curDist < distance and system.name not in excluded:
+    #                     distance = curDist
+    #                     newStop = system
+
+    #         if not newStop:
+    #             print("ERROR: Can't find next stop!")   # there should always be at least itself in the return list, so error if dont have
+    #             raise
+
+    #         elif newStop.name in excluded:
+    #             print(self.system_route)
+    #             self.remove_system(newStop.name) # remove system from system_route
+    #             # step back now
+    #             if goneBack:
+    #                 latestNearby = []   # if already gone back dont pass nearbys again
+    #             if not self.system_route:
+    #                 print("ERROR: Failed to plan route!")
+    #                 raise
+    #             print(self.system_route)
+    #             print("LOG: Hit a dead end with {}, going back".format(newStop.name))
+    #             print (excluded)
+    #             self.find_target_system(self.system_route[-2] if self.system_route[-1].name == newStop.name else self.system_route[-1], 
+    #                                     targetSystemName, targetCoord, jumpCapacity, latestNearby=latestNearby, excluded=excluded, goneBack=True)
+
+    #         elif newStop.name in curNames:   # if the closest stop is already in the list (i.e itself), then remove from the list and step back
+    #             excluded.append(newStop.name)
+    #             self.remove_system(newStop.name)   # remove system from system_route
+    #             if goneBack:
+    #                 latestNearby = []   # if already gone back dont pass nearbys again
+    #             if not self.system_route:
+    #                 print("ERROR: Failed to plan route!")
+    #                 raise
+    #             print("LOG: Hit a dead end with {}, going back".format(newStop.name))
+    #             #print (excluded)
+    #             self.find_target_system(self.system_route[-1], targetSystemName, targetCoord, jumpCapacity, latestNearby=latestNearby, excluded=excluded, goneBack=True)
+    #         else:
+    #             self.find_target_system(newStop, targetSystemName, targetCoord, jumpCapacity, latestNearby=latestNearby, excluded=excluded)
 
     """
     Util function
@@ -452,7 +515,10 @@ class RoutePlanner:
                 
 
 class TripPlanner:
-    def __init__(self, curLocation: str, targetLocation: str, jumpCapacity, minHop: int=1, deviation=2, cargoSpace: int=8, minRange=0):
+    def __init__(self):
+        pass
+
+    def plan(self,  curLocation: str, targetLocation: str, jumpCapacity, minHop: int=1, deviation=2, cargoSpace: int=8, minRange=0):
         # ensure input is correct
         assert isinstance(jumpCapacity, int) or isinstance(jumpCapacity, float)
         assert isinstance(deviation, int) or isinstance(deviation, float)
